@@ -1,31 +1,35 @@
 # Home Comparison Scoring — Smooth v2
 
-独立的 Python 评分模块，供 SC2006 Home Comparison System 迁移使用。无第三方运行依赖，不读取凭据、不调用 API、不修改输入。原型参数仍需团队验证；分数不是满意概率。
+A standalone Python scoring module for integration into the SC2006 Home Comparison System. It has no third-party runtime dependencies, reads no credentials, makes no API calls, and does not modify its inputs. The prototype parameters still require team validation; scores are not probabilities of satisfaction.
 
-## 公式与参数
+## Equations and parameters
 
-- 每周负担 B = 单程分钟 × 每周次数 × trip-leg factor。此模块接收已经计算好的 weekly_minutes，不再次乘频率。
-- 交通 T = 100 × τ / (τ + B)，默认 τ = 300 分钟。
-- 距离 D = 100 × δ / (δ + d)，默认 δ = 500 米。
-- 数量 N = 100 × n / (ν + n)，默认 ν = 3，n 为 1 km 内去重设施数。
-- 设施 A = αD + (1−α)N，默认 α = 0.5。
-- 综合 S = Σ(w × criterion score) / Σw；High / Medium / Low = 3 / 2 / 1。
+- Weekly travel burden B = one-way minutes × visits per week × trip-leg factor. This module receives the precomputed `weekly_minutes` value and does not apply frequency again.
+- Travel T = 100 × τ / (τ + B), with a default τ of 300 minutes.
+- Proximity D = 100 × δ / (δ + d), with a default δ of 500 metres.
+- Venue count N = 100 × n / (ν + n), with a default ν of 3. Here, n is the number of unique venues within 1 km.
+- Amenity A = αD + (1−α)N, with a default α of 0.5.
+- Overall fit S = Σ(w × criterion score) / Σw, with High / Medium / Low weights of 3 / 2 / 1.
 
-τ、δ、ν 是对应单项获得 50 分的输入值，不是最大允许值。平滑函数避免超过阈值后一律为零，数量收益递减。默认所有设施类别共用参数；本版未实现分类别校准。
+τ, δ, and ν are the input values at which their respective components score 50; they are not maximum permitted values. Smooth functions avoid assigning zero to every value beyond a cutoff, while the venue-count component has diminishing returns. All amenity categories currently share the same parameters; category-specific calibration is not implemented.
 
-## 数据与结果规则
+## Evidence and result rules
 
-只在所有候选均有有效证据的指标上计算总分。缺失数据为 unavailable，不能填零。最近距离未知时，整个设施指标不可用；查询得到真实零数量时则保留零数量。负数、非有限数和非整数设施数被拒绝。
+The overall score uses only criteria with valid evidence for every candidate. Missing evidence is unavailable, not zero. If the nearest distance is unknown, the entire amenity criterion is unavailable. A valid observation of zero nearby venues remains a zero count. Negative values, non-finite values, and non-integer venue counts are rejected.
 
-coverage = 共同有效指标数 / 选定指标数 × 100%，单独显示，不乘入总分。
+Coverage = number of shared available criteria / number of selected criteria × 100%. It is displayed separately and does not multiply the overall score.
 
-Complete：全部指标可比；Partial：部分指标可比；Inconclusive：没有共同指标。只有 Complete 返回 highest_fit_candidates，它仅表示该提案下的最高匹配候选，不是已验证推荐。原有 warning / decision 继续标注实验性质。
+- **Complete:** all selected criteria are comparable.
+- **Partial:** some, but not all, selected criteria are comparable.
+- **Inconclusive:** no criteria are jointly available.
 
-总分保留两位小数后排序，相同显示分数并列，名次为 1、1、3；并列保留输入顺序。内部单项与贡献计算保留精度。Python round 使用 ties-to-even。
+Only Complete results return `highest_fit_candidates`. These identify the highest fit under this proposal, not a validated recommendation. The existing `warning` and `decision` fields continue to identify the experimental status.
 
-contributions 是每项加权贡献。pairwise.contribution_differences 给出两房屋逐项贡献差；差值之和等于未舍入总分差。不要将这些差值当成统计置信度。输出记录 version 和 parameters；复现必须保存二者以及输入和证据快照。
+Overall scores are rounded to two decimal places before sorting. Equal displayed scores share competition ranks, such as 1, 1, 3, and retain input order within a tie. Criterion scores and contributions retain their calculation precision. Python's `round` uses ties-to-even rounding.
 
-## 使用
+`contributions` contains each criterion's weighted contribution. Each entry in `pairwise` contains `contribution_differences` between two homes. These differences sum to the difference between their unrounded overall scores; they are not measures of statistical confidence. Outputs record `version` and `parameters`. Reproducibility requires preserving both, together with the inputs and evidence snapshot.
+
+## Usage
 
 ```python
 from scoring import score, ExperimentalPolicy
@@ -35,10 +39,15 @@ rows = [{"postal_code": "Example A", "metrics": {
     "work": {"type": "travel", "available": True, "weekly_minutes": 300}
 }}]
 result = score(rows, criteria)  # overall = 50.0
-# 参数实验：
+
+# Experiment with a different calibration parameter:
 result = score(rows, criteria, policy=ExperimentalPolicy(travel_half=400))
 ```
 
-运行测试：`python -m unittest discover -s tests -v`。
+Run the tests:
 
-迁移步骤见 [docs/MIGRATION.md](docs/MIGRATION.md)。没有复制原项目数据、环境文件或凭据，也没有更改原项目。
+```sh
+python -m unittest discover -s tests -v
+```
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for integration instructions. This package does not include the original project's data, environment files, or credentials, and does not modify that project.
